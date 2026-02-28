@@ -1,0 +1,111 @@
+name: Service CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+
+  build:
+    name: .NET Build
+    runs-on: windows-latest
+      
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install .NET Core
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 08.0.x
+
+    - name: Restore
+      working-directory: ./hacka-alert-engine
+      run: dotnet restore
+
+    - name: Build
+      working-directory: ./hacka-alert-engine
+      run: dotnet build --no-restore --configuration Release
+
+    # - name: Test
+      # working-directory: ./hacka-ingestion-service
+      # run: dotnet test --no-build --configuration Release
+
+    - name: Publish
+      working-directory: ./hacka-alert-engine
+      run: dotnet publish --configuration Release --output ./publish
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: app
+        path: ./publish
+
+
+  docker:
+    name: Docker Build e Push
+    runs-on: ubuntu-latest
+    needs: build
+    environment: Homolog
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Login no Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build da imagem
+        run: |
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.IMAGE_NAME }}:${{ github.sha }} .
+
+      - name: Push da imagem
+        run: |
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.IMAGE_NAME }}:${{ github.sha }} .
+
+  deploy:
+    name: Deploy AKS
+    runs-on: ubuntu-latest
+    needs: docker
+    environment: Homolog
+    if: github.event_name == 'push'
+
+    steps:
+
+      - name: AKS deploy placeholder
+        run: |
+          echo "AKS deploy placeholder."
+          
+#      - name: Checkout
+#        uses: actions/checkout@v4
+
+#      - name: Login na Azure
+#        uses: azure/login@v2
+#        with:
+#          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+#      - name: Set context do AKS
+#        uses: azure/aks-set-context@v4
+#        with:
+#          resource-group: ${{ vars.AKS_RESOURCE_GROUP }}
+#          cluster-name: ${{ vars.AKS_CLUSTER_NAME }}
+
+#      - name: Replace Docker image tag
+#        run: |
+#          echo "Replacing image tag in deployment.yaml"
+#          sed -i 's|__TAG__|${{ github.sha }}|g' k8s/deployment.yaml
+
+#      - name: Aplicar manifests
+#        run: kubectl apply -f k8s/
+
+    
